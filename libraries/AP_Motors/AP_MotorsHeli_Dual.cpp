@@ -37,7 +37,7 @@ const AP_Param::GroupInfo AP_MotorsHeli_Dual::var_info[] = {
     // @Param: DCP_SCALER
     // @DisplayName: Differential-Collective-Pitch Scaler
     // @Description: Scaling factor applied to the differential-collective-pitch
-    // @Range: 0 1
+    // @Range: -1 1
     // @User: Standard
     AP_GROUPINFO("DCP_SCALER", 10, AP_MotorsHeli_Dual, _dcp_scaler, AP_MOTORS_HELI_DUAL_DCP_SCALER),
 
@@ -400,6 +400,30 @@ float AP_MotorsHeli_Dual::get_swashplate (int8_t swash_num, int8_t swash_axis, f
                 swash_tilt = -0.45f * _dcp_scaler * roll_input + coll_input;
             }
         }
+    }
+    else if(_dual_mode == AP_MOTORS_HELI_DUAL_MODE_INTERMESHING) {
+            // roll tilt
+            if (swash_axis == AP_MOTORS_HELI_DUAL_SWASH_AXIS_ROLL) {
+                if (swash_num == 1) {
+                    swash_tilt = roll_input;
+                } else if (swash_num == 2) {
+                    swash_tilt = roll_input;
+                }
+            } else if (swash_axis == AP_MOTORS_HELI_DUAL_SWASH_AXIS_PITCH) {
+            // pitch tilt
+                if (swash_num == 1) {
+                    swash_tilt = pitch_input - _yaw_scaler * yaw_input;
+                } else if (swash_num == 2) {
+                    swash_tilt = pitch_input + _yaw_scaler * yaw_input;
+                }
+            } else if (swash_axis == AP_MOTORS_HELI_DUAL_SWASH_AXIS_COLL) {
+            // collective
+                if (swash_num == 1) {
+                    swash_tilt = 0.45f * _dcp_scaler * yaw_input + coll_input;
+                } else if (swash_num == 2) {
+                    swash_tilt = -0.45f * _dcp_scaler * yaw_input + coll_input;
+                }
+            }
     } else { // AP_MOTORS_HELI_DUAL_MODE_TANDEM
         // roll tilt
         if (swash_axis == AP_MOTORS_HELI_DUAL_SWASH_AXIS_ROLL) {
@@ -481,7 +505,7 @@ void AP_MotorsHeli_Dual::move_actuators(float roll_out, float pitch_out, float c
     limit.throttle_lower = false;
     limit.throttle_upper = false;
 
-    if (_dual_mode == AP_MOTORS_HELI_DUAL_MODE_TRANSVERSE) {
+    if (_dual_mode == AP_MOTORS_HELI_DUAL_MODE_TRANSVERSE || _dual_mode == AP_MOTORS_HELI_DUAL_MODE_INTERMESHING) {
         if (pitch_out < -_cyclic_max/4500.0f) {
             pitch_out = -_cyclic_max/4500.0f;
             limit.pitch = true;
@@ -514,10 +538,12 @@ void AP_MotorsHeli_Dual::move_actuators(float roll_out, float pitch_out, float c
         // add differential collective pitch yaw compensation
         if (_dual_mode == AP_MOTORS_HELI_DUAL_MODE_TRANSVERSE) {
             yaw_compensation = _dcp_yaw_effect * roll_out;
-        } else { // AP_MOTORS_HELI_DUAL_MODE_TANDEM
-            yaw_compensation = _dcp_yaw_effect * pitch_out;
+            yaw_out = yaw_out + yaw_compensation;
         }
-        yaw_out = yaw_out + yaw_compensation;
+        else if (_dual_mode == AP_MOTORS_HELI_DUAL_MODE_TANDEM) {
+            yaw_compensation = _dcp_yaw_effect * pitch_out;
+            yaw_out = yaw_out + yaw_compensation;
+        }
     }
 
     // scale yaw and update limits
